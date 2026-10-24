@@ -47,6 +47,7 @@ if [ "$1" = "--release" ]; then
   cd "$ROOT/dist"
   ditto -c -k --keepParent Zhibi.app "Zhibi-$VERSION.zip"
   shasum -a 256 "Zhibi-$VERSION.zip" | awk '{print $1}' > "Zhibi-$VERSION.zip.sha256"
+  rm -rf Zhibi.app   # a second copy with the same bundle id confuses LaunchServices (URL scheme, open -a)
   echo "$ROOT/dist/Zhibi-$VERSION.zip $(cat "Zhibi-$VERSION.zip.sha256")"
 else
   pkill -x Zhibi && sleep 1 || true
