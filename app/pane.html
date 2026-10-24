@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:; script-src 'nonce-pane'">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { font: 14px/1.5 -apple-system, "PingFang SC", "Helvetica Neue", sans-serif; color: #242424; -webkit-user-select: none; }
+  .pane { position: absolute; inset: 0; display: flex; flex-direction: column; background: #fff; border-radius: 12px;
+          border: 1px solid rgba(0,0,0,.07); overflow: hidden; }
+  header { display: flex; align-items: center; gap: 8px; padding: 14px 12px 6px 18px; }
+  header b { font-size: 19px; font-weight: 600; letter-spacing: .2px; }
+  header .spacer { flex: 1; }
+  .icon-btn { width: 30px; height: 30px; border: 0; border-radius: 6px; background: transparent; color: #424242;
+              display: grid; place-items: center; cursor: default; }
+  .icon-btn:hover { background: #f0f0f0; }
+  .icon-btn.active { background: #e8f0fb; color: #0f6cbd; }
+  .icon-btn svg { width: 18px; height: 18px; }
+  main { flex: 1; overflow-y: auto; padding: 8px 18px 12px; }
+  main::-webkit-scrollbar { width: 6px; }
+  main::-webkit-scrollbar-thumb { background: #d1d1d1; border-radius: 3px; }
+
+  .empty { height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; gap: 6px; color: #424242; }
+  .empty .logo svg { width: 44px; height: 44px; }
+  .empty h2 { margin: 6px 0 0; font-size: 17px; font-weight: 600; color: #242424; }
+  .empty p { margin: 0 0 10px; font-size: 13px; color: #616161; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .empty .chips { justify-content: center; }
+  .chip { border: 1px solid #d1d1d1; background: #fff; color: #242424; border-radius: 14px; padding: 4px 11px; font: inherit; font-size: 12.5px; cursor: default; }
+  .chip:hover { background: #f5f5f5; border-color: #c7c7c7; }
+  .chip:disabled { color: #a0a0a0; border-color: #e0e0e0; background: #fff; }
+
+  .msg { margin: 14px 0; }
+  .user { display: flex; justify-content: flex-end; }
+  .user .bubble { max-width: 88%; background: #ebebeb; border-radius: 18px; padding: 10px 16px; white-space: pre-wrap; word-break: break-word; -webkit-user-select: text; }
+  .divider { text-align: center; font-size: 12px; color: #8a8a8a; margin: 18px 0 6px; }
+  .status { display: flex; align-items: center; gap: 8px; color: #616161; font-size: 13px; }
+  .spin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid #c7d7f0; border-top-color: #0f6cbd; animation: r .8s linear infinite; }
+  @keyframes r { to { transform: rotate(360deg); } }
+  .note { font-size: 12.5px; color: #616161; margin: 0 0 8px; }
+  .draft { border: 1px solid #e3e3e3; border-radius: 10px; padding: 12px 14px; background: #fff; overflow-x: auto; -webkit-user-select: text; }
+  .draft table { max-width: none; }
+  .notes { border-radius: 10px; padding: 8px 14px; margin: 0 0 10px; background: #f3f7fc; border: 1px solid #dce6f2; overflow-x: auto; -webkit-user-select: text; }
+  .notes summary { font-size: 12px; font-weight: 600; color: #0f6cbd; padding: 2px 0; cursor: default; }
+  .notes[open] summary { margin-bottom: 4px; }
+  /* The renderer styles notes like the mail; in the pane they read better at the pane's own size. */
+  .notes div, .notes p, .notes li, .notes span, .notes td, .notes th { font-family: inherit !important; font-size: 13px !important; line-height: 1.55 !important; }
+  .notes p { margin: 0 0 6px !important; }
+  .warn { color: #cf222e; font-size: 12.5px; margin-top: 6px; }
+  .error { color: #cf222e; font-size: 13px; white-space: pre-wrap; word-break: break-word; }
+  .actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+  .btn { border: 1px solid #d1d1d1; background: #fff; color: #242424; border-radius: 6px; padding: 5px 12px; font: inherit; font-size: 13px; cursor: default; }
+  .btn:hover { background: #f5f5f5; }
+  .btn.primary { background: #0f6cbd; border-color: #0f6cbd; color: #fff; font-weight: 500; }
+  .btn.primary:hover { background: #115ea3; }
+  .btn:disabled { opacity: .5; }
+  .done { font-size: 12.5px; color: #1a7f37; }
+  .refine { margin-top: 10px; }
+
+  footer { padding: 6px 14px 10px; }
+  .ctx { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; margin: 0 0 8px 2px; padding: 3px 10px 3px 8px;
+         border-radius: 12px; background: #f3f3f3; color: #424242; font-size: 12px; }
+  .ctx svg { width: 14px; height: 14px; flex: none; }
+  .ctx span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ctx.none { color: #8a8a8a; }
+  .box { border: 1px solid #d1d1d1; border-radius: 12px; padding: 10px 10px 8px 14px; background: #fff; }
+  .box:focus-within { border-color: #0f6cbd; box-shadow: 0 0 0 1px #0f6cbd; }
+  textarea { width: 100%; border: 0; outline: 0; resize: none; font: inherit; font-size: 14px; line-height: 1.45; min-height: 21px; max-height: 140px; padding: 0; color: #242424; background: transparent; }
+  textarea::placeholder { color: #8a8a8a; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .row .spacer { flex: 1; }
+  .toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #424242; }
+  .toggle i { width: 28px; height: 16px; border-radius: 8px; background: #c7c7c7; position: relative; transition: background .15s; }
+  .toggle i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #fff; transition: left .15s; }
+  .toggle.on i { background: #0f6cbd; }
+  .toggle.on i::after { left: 14px; }
+  .send { width: 30px; height: 30px; border-radius: 50%; border: 0; background: #0f6cbd; color: #fff; display: grid; place-items: center; }
+  .send:disabled { background: #e0e0e0; }
+  .send svg { width: 16px; height: 16px; }
+  .fine { text-align: center; font-size: 11px; color: #8a8a8a; margin-top: 8px; }
+
+  #settings { position: absolute; inset: 52px 0 0 0; z-index: 5; background: #fff; display: flex; flex-direction: column; }
+  .field[hidden] { display: none; }
+  #settings[hidden] { display: none; }
+  .form { flex: 1; overflow-y: auto; padding: 4px 18px 12px; font-size: 13px; }
+  .form h3 { font-size: 13px; font-weight: 600; margin: 16px 0 8px; color: #242424; }
+  .stitle { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 0 2px; }
+  .stitle b { font-size: 15px; font-weight: 600; }
+  .field { display: grid; grid-template-columns: 64px 1fr; align-items: center; gap: 6px 10px; margin: 8px 0; }
+  .field > label { color: #616161; font-size: 12.5px; }
+  .field input[type=text], .field input[type=password], .field select {
+    width: 100%; font: inherit; font-size: 13px; padding: 5px 8px; border: 1px solid #d1d1d1; border-radius: 6px; background: #fff; color: #242424; -webkit-user-select: text; }
+  .field input:focus, .field select:focus { outline: 0; border-color: #0f6cbd; box-shadow: 0 0 0 1px #0f6cbd; }
+  .field input[type=color] { width: 36px; height: 26px; padding: 0 2px; border: 1px solid #d1d1d1; border-radius: 6px; background: #fff; }
+  .seg { display: inline-flex; border: 1px solid #d1d1d1; border-radius: 6px; overflow: hidden; }
+  .seg button { border: 0; background: #fff; font: inherit; font-size: 12.5px; padding: 4px 10px; color: #424242; }
+  .seg button + button { border-left: 1px solid #d1d1d1; }
+  .seg button.on { background: #0f6cbd; color: #fff; }
+  .hint { font-size: 12px; color: #8a8a8a; margin: 2px 0 0 74px; line-height: 1.45; }
+  .detected { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #424242; margin: 6px 0 0 74px; flex-wrap: wrap; }
+  .swatch { width: 12px; height: 12px; border-radius: 3px; border: 1px solid rgba(0,0,0,.15); display: inline-block; }
+  .link { border: 0; background: none; color: #0f6cbd; font: inherit; font-size: 12.5px; padding: 0; }
+  .preview { border: 1px solid #e3e3e3; border-radius: 10px; padding: 12px 14px; margin-top: 6px; overflow-x: auto; max-height: 260px; overflow-y: auto; }
+  .bar { display: flex; gap: 8px; justify-content: flex-end; align-items: center; padding: 10px 18px 14px; border-top: 1px solid #f0f0f0; }
+  .bar .msg { flex: 1; font-size: 12px; color: #616161; }
+  .dim { opacity: .45; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="pane">
+  <header>
+    <span class="logo-s" id="logo-s"></span>
+    <b>执笔</b>
+    <span class="spacer"></span>
+    <button class="icon-btn" id="new" title="新对话"></button>
+    <button class="icon-btn" id="gear" title="设置"></button>
+    <button class="icon-btn" id="close" title="关闭"></button>
+  </header>
+  <section id="settings" hidden>
+    <div class="form">
+      <div class="stitle"><b>设置</b><button class="link" id="sback">返回对话</button></div>
+      <h3>AI 接口</h3>
+      <div class="field"><label>认证</label>
+        <span class="seg" id="auth"><button data-v="claude-login">本机 Claude Code 登录</button><button data-v="api-key">API Key</button></span></div>
+      <div id="keyrow">
+        <div class="field"><label>API Key</label><input type="password" id="apikey" placeholder="sk-ant-…（存进钥匙串）" autocomplete="off"></div>
+        <div class="hint" id="keyhint"></div>
+      </div>
+      <div class="field"><label>API 地址</label><input type="text" id="baseurl" placeholder="留空用默认；公司网关填这里"></div>
+      <div class="field"><label>模型</label>
+        <select id="model"><option value="">默认（跟 Claude Code 一致）</option><option value="opus">Opus（质量最好）</option>
+        <option value="sonnet">Sonnet（更快）</option><option value="haiku">Haiku（最快）</option><option value="custom">自定义模型 ID…</option></select></div>
+      <div class="field" id="modelrow" hidden><label></label><input type="text" id="modelid" placeholder="例如 claude-opus-5-5"></div>
+      <div class="field"><label>思考力度</label>
+        <span class="seg" id="effort"><button data-v="low">低</button><button data-v="medium">中</button><button data-v="high">高</button><button data-v="xhigh">很高</button></span></div>
+      <div class="hint">力度越高越细致，也越慢。日常回复用「中」就够。</div>
+
+      <h3>回复格式</h3>
+      <div class="field"><label>字体字号</label>
+        <span class="seg" id="source"><button data-v="outlook">跟随 Outlook</button><button data-v="custom">自定义</button></span></div>
+      <div class="detected" id="detected"></div>
+      <div id="custom">
+        <div class="field"><label>字体</label><input type="text" id="font" placeholder="'Microsoft YaHei', Arial, sans-serif"></div>
+        <div class="field"><label>字号</label><input type="text" id="size" placeholder="10.5pt"></div>
+        <div class="field"><label>颜色</label><input type="color" id="color"></div>
+      </div>
+
+      <h3>签名</h3>
+      <div class="field"><label>签名</label><select id="sig"></select></div>
+      <div class="field"><label>结束语</label><input type="text" id="closing" placeholder="BR"></div>
+      <div class="hint">签名本身以 BEST REGARDS 之类开头时，不再重复加结束语。</div>
+
+      <h3>预览</h3>
+      <div class="preview" id="pv"></div>
+    </div>
+    <div class="bar"><span class="msg" id="smsg"></span><button class="btn" id="ping">测试连接</button><button class="btn primary" id="save">保存</button></div>
+  </section>
+  <main id="chat"></main>
+  <footer>
+    <div class="ctx none" id="ctx"></div>
+    <div class="box">
+      <textarea id="input" rows="1" placeholder="写要点，比如：同意，周五前给方案"></textarea>
+      <div class="row">
+        <span class="toggle on" id="all"><i></i>全部答复</span>
+        <span class="spacer"></span>
+        <button class="send" id="send" title="生成（↩）"></button>
+      </div>
+    </div>
+    <div class="fine">执笔由 AI 起草，发送前请核对。</div>
+  </footer>
+</div>
+<script nonce="pane">
+// 执笔's mark: a fountain-pen nib, tip down-left (same shape as the toolbar button and app icon).
+const NIB = (size, id) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
+  <stop offset="0" stop-color="#0f6cbd"/><stop offset="1" stop-color="#12a3b5"/></linearGradient></defs>
+  <g transform="rotate(45 16 16)"><path fill="url(#${id})" d="M10.5 3H21.5C21.5 7.5 25 9.5 25 14L16 30L7 14C7 9.5 10.5 7.5 10.5 3Z"/>
+  <circle cx="16" cy="15" r="2" fill="#fff"/><path d="M16 16V30" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g></svg>`;
+function gearIcon() {
+  // Eight-tooth gear outline, generated so it stays crisp at any size.
+  const n = 8, R = 8.6, r = 6.7, step = Math.PI / n, pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * 2 * Math.PI;
+    for (const [t, rad] of [[a - step * 0.6, r], [a - step * 0.38, R], [a + step * 0.38, R], [a + step * 0.6, r]])
+      pts.push([10 + rad * Math.cos(t), 10 + rad * Math.sin(t)]);
+  }
+  const d = "M" + pts.map((p) => p.map((v) => v.toFixed(2)).join(" ")).join("L") + "Z";
+  return `<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="${d}"/><circle cx="10" cy="10" r="2.6"/></svg>`;
+}
+const ICON = {
+  new: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M9 3.5H5a1.5 1.5 0 0 0-1.5 1.5v10A1.5 1.5 0 0 0 5 16.5h10a1.5 1.5 0 0 0 1.5-1.5v-4"/><path d="M14.5 3.2l2.3 2.3-7 7-3 .7.7-3z"/></svg>',
+  close: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5 5l10 10M15 5L5 15"/></svg>',
+  gear: gearIcon(),
+  send: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 16V4M5 9l5-5 5 5"/></svg>',
+  mail: '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="2.5" y="4.5" width="15" height="11" rx="1.5"/><path d="M3 5.5l7 5 7-5"/></svg>',
+};
+const $ = (id) => document.getElementById(id);
+const chat = $("chat"), input = $("input"), sendBtn = $("send"), allBtn = $("all");
+const post = (msg) => window.webkit.messageHandlers.app.postMessage(msg);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+$("logo-s").innerHTML = NIB(22, "g1");
+$("new").innerHTML = ICON.new;
+$("close").innerHTML = ICON.close;
+$("gear").innerHTML = ICON.gear;
+sendBtn.innerHTML = ICON.send;
+
+let busy = false, hasMail = false;
+const STARTERS = [["按原文拟一版", ""], ["同意，并给出时间", "同意，给出明确的完成时间"], ["逐条回复对方的问题", "逐条回答对方提出的问题"], ["礼貌地婉拒", "礼貌地婉拒，并给出替代方案"]];
+const REFINES = ["更简短", "更正式", "语气更委婉", "改成英文"];
+
+function renderEmpty() {
+  chat.innerHTML = `<div class="empty"><div class="logo">${NIB(44, "g2")}</div><h2>为这封邮件执笔</h2>
+    <p>写一句要点，或者点下面的快捷方式。<br>满意后点「打开答复窗口」，正文会填进 Outlook。</p>
+    <div class="chips">${STARTERS.map(([t, p], i) => `<button class="chip" data-starter="${i}">${t}</button>`).join("")}</div></div>`;
+  refreshDisabled();
+}
+function clearEmpty() { const e = chat.querySelector(".empty"); if (e) e.remove(); }
+function scrollEnd() { chat.scrollTop = chat.scrollHeight; }
+function refreshDisabled() {
+  sendBtn.disabled = busy || !hasMail;
+  chat.querySelectorAll(".chip, .btn[data-regen], .btn[data-open]").forEach((b) => (b.disabled = busy || (b.dataset.starter !== undefined && !hasMail)));
+}
+function autosize() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 140) + "px"; }
+
+function send(text) {
+  if (busy || !hasMail) return;
+  post({ type: "send", text, all: allBtn.classList.contains("on") });
+  input.value = ""; autosize();
+}
+
+// Called from Swift.
+window.pane = {
+  setMail(subject) {
+    hasMail = !!subject;
+    const ctx = $("ctx");
+    ctx.className = "ctx" + (subject ? "" : " none");
+    ctx.innerHTML = ICON.mail + `<span>${esc(subject || "在 Outlook 里选中一封邮件")}</span>`;
+    ctx.title = subject || "";
+    refreshDisabled();
+  },
+  setBusy(b) { busy = b; refreshDisabled(); },
+  clear() { renderEmpty(); },
+  focus() { input.focus(); },
+  divider(text) { clearEmpty(); chat.insertAdjacentHTML("beforeend", `<div class="divider">${esc(text)}</div>`); },
+  user(text) { clearEmpty(); chat.insertAdjacentHTML("beforeend", `<div class="msg user"><div class="bubble">${esc(text)}</div></div>`); scrollEnd(); },
+  start(id, text) {
+    chat.insertAdjacentHTML("beforeend", `<div class="msg bot" id="m${id}"><div class="status"><span class="spin"></span><span>${esc(text)}</span></div></div>`);
+    scrollEnd();
+  },
+  status(id, text) { const s = document.querySelector(`#m${id} .status span:last-child`); if (s) s.textContent = text; },
+  draft(id, d) {
+    const m = $("m" + id); if (!m) return;
+    const warn = d.placeholders.length ? `<div class="warn">${d.placeholders.length} 处【待确认】需要你补全</div>` : "";
+    const notes = d.notesHtml ? `<details class="notes" open><summary>分析（不进邮件）</summary>${d.notesHtml}</details>` : "";
+    m.innerHTML = `${notes}<div class="note">${esc(d.note)}</div><div class="draft">${d.html}</div>${warn}
+      <div class="actions"><button class="btn primary" data-open="${id}">${esc(d.openLabel)}</button>
+      <button class="btn" data-copy="${id}">复制</button><button class="btn" data-regen="${id}">重新生成</button><span class="done" id="d${id}"></span></div>
+      <div class="chips refine">${REFINES.map((t) => `<button class="chip" data-refine="${id}">${t}</button>`).join("")}</div>`;
+    refreshDisabled(); scrollEnd();
+  },
+  error(id, text, retry) {
+    const m = $("m" + id); if (!m) return;
+    m.innerHTML = `<div class="error">${esc(text)}</div>` + (retry ? `<div class="actions"><button class="btn" data-regen="${id}">重试</button></div>` : "");
+    refreshDisabled(); scrollEnd();
+  },
+  opened(id, text, ok) { const d = $("d" + id); if (d) { d.textContent = text; d.style.color = ok ? "#1a7f37" : "#cf222e"; } },
+};
+
+chat.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b || b.disabled) return;
+  if (b.dataset.starter !== undefined) send(STARTERS[+b.dataset.starter][1]);
+  else if (b.dataset.open) post({ type: "open", id: +b.dataset.open });
+  else if (b.dataset.copy) { post({ type: "copy", id: +b.dataset.copy }); pane.opened(+b.dataset.copy, "已复制", true); }
+  else if (b.dataset.regen) post({ type: "regen", id: +b.dataset.regen });
+  else if (b.dataset.refine) post({ type: "refine", id: +b.dataset.refine, text: b.textContent });
+});
+$("new").addEventListener("click", () => post({ type: "new" }));
+$("close").addEventListener("click", () => post({ type: "close" }));
+sendBtn.addEventListener("click", () => send(input.value.trim()));
+allBtn.addEventListener("click", () => allBtn.classList.toggle("on"));
+input.addEventListener("input", autosize);
+input.addEventListener("keydown", (e) => {
+  if (e.isComposing || e.keyCode === 229) return;  // IME is choosing characters
+  if (e.key === "Enter" && !e.shiftKey && !e.altKey) { e.preventDefault(); send(input.value.trim()); }
+  else if (e.key === "Escape") { e.preventDefault(); post({ type: "close" }); }
+});
+// ---- settings ----
+const settingsEl = $("settings");
+let S = null;  // {config, outlook, api_key_saved}
+const segVal = (id) => ($(id).querySelector("button.on") || {}).dataset?.v;
+const setSeg = (id, v) => $(id).querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+["auth", "effort", "source"].forEach((id) => $(id).addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return; setSeg(id, b.dataset.v); syncSettings();
+}));
+function sigHtml(choice) {
+  const o = S.outlook || {}, sigs = o.signatures || [];
+  if (choice === "outlook") {
+    const id = (o.default_signature || {}).reply;
+    return { sig: sigs.find((s) => s.id === id), insertedByOutlook: true };
+  }
+  return { sig: sigs.find((s) => s.name === choice || s.id === choice), insertedByOutlook: false };
+}
+function syncSettings() {
+  if (!S) return;
+  const o = S.outlook || {};
+  $("keyrow").classList.toggle("dim", segVal("auth") !== "api-key");
+  $("modelrow").hidden = $("model").value !== "custom";
+  const follow = segVal("source") === "outlook";
+  $("custom").classList.toggle("dim", follow);
+  const font = follow ? o.font_family : $("font").value, size = follow ? o.font_size : $("size").value;
+  const color = follow ? o.color : $("color").value;
+  const { sig, insertedByOutlook } = sigHtml($("sig").value);
+  const closing = $("closing").value.trim();
+  const skipClosing = sig && sig.starts_with_regards;
+  let html = `<div style="font-family:${esc(font || "")};font-size:${esc(size || "")};color:${esc(color || "")};line-height:1.6">
+    <p style="margin:0 0 8px">Hi all</p><p style="margin:0 0 8px">这是一段示例正文，确认后会按这个样式填进回复窗口。Sample text 123.</p>`;
+  if (closing && !skipClosing) html += `<p style="margin:12px 0 8px">${esc(closing)}</p>`;
+  html += "</div>";
+  if (sig && !insertedByOutlook) html += `<div style="margin-top:${skipClosing ? 12 : 4}px">${sig.html}</div>`;
+  if (sig && insertedByOutlook) html += `<div class="hint" style="margin:8px 0 0">Outlook 会在回复窗口里自动加上默认签名「${esc(sig.name)}」。</div>`;
+  $("pv").innerHTML = html;
+}
+["model", "sig"].forEach((id) => $(id).addEventListener("change", syncSettings));
+["font", "size", "color", "closing"].forEach((id) => $(id).addEventListener("input", syncSettings));
+function collectSettings() {
+  const model = $("model").value === "custom" ? $("modelid").value.trim() : $("model").value;
+  const v = {
+    ai_auth: segVal("auth"), ai_base_url: $("baseurl").value.trim(), ai_model: model, ai_effort: segVal("effort"),
+    format_source: segVal("source"), font_family: $("font").value.trim(), font_size: $("size").value.trim(),
+    text_color: $("color").value, signature: $("sig").value, closing: $("closing").value.trim(),
+  };
+  if ($("apikey").value.trim()) v.api_key = $("apikey").value.trim();
+  return v;
+}
+function openSettings() { settingsEl.hidden = false; $("gear").classList.add("active"); $("smsg").textContent = "读取中…"; post({ type: "openSettings" }); }
+function closeSettings() { settingsEl.hidden = true; $("gear").classList.remove("active"); }
+$("sback").addEventListener("click", closeSettings);
+$("gear").addEventListener("click", () => (settingsEl.hidden ? openSettings() : closeSettings()));
+$("save").addEventListener("click", () => { $("smsg").textContent = "保存中…"; post({ type: "saveSettings", values: collectSettings() }); });
+$("ping").addEventListener("click", () => { $("smsg").textContent = "保存并测试中…"; post({ type: "saveSettings", values: collectSettings(), ping: true }); });
+$("detected").addEventListener("click", (e) => { if (e.target.id === "refresh") { $("smsg").textContent = "正在重新读取 Outlook…"; post({ type: "openSettings", refresh: true }); } });
+
+Object.assign(window.pane, {
+  showSettings(d) {
+    S = d; const c = d.config, o = d.outlook || {};
+    setSeg("auth", c.ai_auth || "claude-login"); setSeg("effort", c.ai_effort || "medium"); setSeg("source", c.format_source || "outlook");
+    $("baseurl").value = c.ai_base_url || ""; $("apikey").value = "";
+    const known = ["", "opus", "sonnet", "haiku"].includes(c.ai_model || "");
+    $("model").value = known ? c.ai_model || "" : "custom"; $("modelid").value = known ? "" : c.ai_model;
+    $("keyhint").textContent = d.api_key_saved ? "已保存在钥匙串。留空表示不修改。" : "还没有保存 API Key。";
+    $("font").value = c.font_family || ""; $("size").value = c.font_size || ""; $("color").value = /^#[0-9a-f]{6}$/i.test(c.text_color) ? c.text_color : "#1f2329";
+    $("closing").value = c.closing ?? "BR";
+    const sigs = o.signatures || [], defId = (o.default_signature || {}).reply, def = sigs.find((s) => s.id === defId);
+    $("sig").innerHTML = `<option value="outlook">跟随 Outlook 默认答复签名（当前：${esc(def ? def.name : "未设置")}）</option>`
+      + sigs.map((s) => `<option value="${esc(s.name)}">${esc(s.name)}${s.has_images ? "（含图片）" : ""}</option>`).join("")
+      + '<option value="none">不加签名</option>';
+    $("sig").value = c.signature || "outlook";
+    if ($("sig").value === "") $("sig").value = "outlook";
+    $("detected").innerHTML = o.error ? `<span class="error">读取 Outlook 失败：${esc(o.error)}</span>`
+      : `Outlook 当前：${esc((o.font_family || "").split(",")[0])} · ${esc(o.font_size || "")} · <span class="swatch" style="background:${esc(o.color || "#000")}"></span>${esc(o.color || "")}`
+        + `<span style="color:#8a8a8a">（${esc(o.source || "")}）</span><button class="link" id="refresh">重新读取</button>`;
+    $("smsg").textContent = "";
+    syncSettings();
+  },
+  settingsSaved(d) { $("smsg").textContent = d.ok ? "已保存，新草稿会按新设置生成。" : "保存失败：" + (d.message || ""); if (d.ok) { S.api_key_saved = d.api_key_saved; $("apikey").value = ""; $("keyhint").textContent = d.api_key_saved ? "已保存在钥匙串。留空表示不修改。" : "还没有保存 API Key。"; } },
+  pingResult(d) { $("smsg").textContent = d.ok ? `连接正常：${d.model || "AI"} 回复 ${d.reply}，用时 ${(d.ms / 1000).toFixed(1)} 秒` : "连接失败：" + (d.message || ""); },
+});
+
+document.addEventListener("contextmenu", (e) => { if (!e.target.closest(".draft, .notes, .bubble, textarea")) e.preventDefault(); });
+renderEmpty();
+pane.setMail("");
+post({ type: "ready" });
+</script>
+</body>
+</html>
