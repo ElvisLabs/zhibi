@@ -1,0 +1,39 @@
+name: Smoke test
+
+# app/publish.sh runs this on the draft release before publishing it: the arm64 build is cross-built on an
+# Intel Mac, so this is the first time it runs on Apple silicon.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to test, drafts included (e.g. v0.2.0)
+        required: true
+
+permissions:
+  contents: write  # draft releases are only visible with write access
+
+jobs:
+  arm64:
+    runs-on: macos-15
+    steps:
+      - name: Download the arm64 zip
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "${{ inputs.tag }}" -R "${{ github.repository }}" -p "Zhibi-*-arm64.zip" -D dl
+          ditto -x -k dl/*.zip .
+
+      - name: Check the bundle
+        run: |
+          set -euo pipefail
+          C=Zhibi.app/Contents
+          PY=$C/Resources/python/bin/python3
+          codesign --verify --strict Zhibi.app
+          test "$(lipo -archs $C/MacOS/Zhibi)" = arm64
+          $PY -c 'import outlook_cli.exchange, exchangelib, lxml.etree, cryptography, keyring, openpyxl, xlrd, pypdf'
+          $PY $C/Resources/scripts/ai_reply.py --help > /dev/null
+          printf '# 测试\n\n- 一\n' > t.md
+          $PY -I $C/Resources/scripts/render.py t.md -o t > /dev/null
+          test -s t.html
+          out=$($C/Resources/scripts/outlook_compose.sh || true)
+          echo "$out" | grep -q E_USAGE

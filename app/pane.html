@@ -120,6 +120,13 @@
   <section id="settings" hidden>
     <div class="form">
       <div class="stitle"><b>设置</b><button class="link" id="sback">返回对话</button></div>
+      <h3>邮箱账号</h3>
+      <div class="field"><label>邮箱</label><input type="text" id="email" placeholder="name@company.com" autocomplete="off"></div>
+      <div class="field"><label>密码</label><input type="password" id="pwd" placeholder="存进钥匙串" autocomplete="off"></div>
+      <div class="field"><label>服务器</label><input type="text" id="server" placeholder="留空自动发现，例如 mail.company.com"></div>
+      <div class="field"><label></label><span><button class="btn" id="login">登录并测试</button></span></div>
+      <div class="hint" id="acct"></div>
+
       <h3>AI 接口</h3>
       <div class="field"><label>认证</label>
         <span class="seg" id="auth"><button data-v="claude-login">本机 Claude Code 登录</button><button data-v="api-key">API Key</button></span></div>
@@ -171,11 +178,20 @@
   </footer>
 </div>
 <script nonce="pane">
-// 执笔's mark: a fountain-pen nib, tip down-left (same shape as the toolbar button and app icon).
-const NIB = (size, id) => `<svg viewBox="0 0 32 32" width="${size}" height="${size}"><defs><linearGradient id="${id}" x1="0" y1="0" x2="1" y2="1">
-  <stop offset="0" stop-color="#0f6cbd"/><stop offset="1" stop-color="#12a3b5"/></linearGradient></defs>
-  <g transform="rotate(45 16 16)"><path fill="url(#${id})" d="M10.5 3H21.5C21.5 7.5 25 9.5 25 14L16 30L7 14C7 9.5 10.5 7.5 10.5 3Z"/>
-  <circle cx="16" cy="15" r="2" fill="#fff"/><path d="M16 16V30" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></g></svg>`;
+// 执笔's mark: a blue envelope and a fountain pen writing on it (same shape as the toolbar button).
+const MARK = (size, id) => {
+  const across = (name, stops) => `<linearGradient id="${id}${name}" x1="0" y1="0" x2="0" y2="1">${stops.map(([o, c]) => `<stop offset="${o}" stop-color="${c}"/>`).join("")}</linearGradient>`;
+  return `<svg viewBox="0 0 32 32" width="${size}" height="${size}"><defs>${across("e", [[0, "#5cc2ff"], [1, "#1660e8"]])}
+  ${across("g", [[0, "#9c6b1e"], [0.6, "#f3d27e"], [1, "#9c6b1e"]])}${across("s", [[0, "#05070c"], [0.7, "#4a5262"], [1, "#0b0e15"]])}
+  ${across("b", [[0, "#0b1630"], [0.55, "#2a4f9e"], [0.78, "#8fb0ee"], [1, "#112552"]])}</defs>
+  <rect x="2" y="9" width="21" height="15" rx="2.6" fill="url(#${id}e)"/>
+  <g fill="none" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"><path d="M4.4 11.3L12.5 17L20.6 11.3" stroke="#fff" stroke-opacity=".8"/>
+  <path d="M5.6 20.6C6.8 18.6 8.4 18.6 9.6 20.4C10.8 22.2 12.4 22.2 13.6 20.4" stroke="#fff"/></g>
+  <g transform="translate(14 20.4) rotate(-45)">
+  <path d="M0 0C1.9 .5 3 1.8 4.2 1.8L6.2 2.2H17.8A2.2 2.2 0 0 0 17.8 -2.2H6.2L4.2 -1.8C3 -1.8 1.9 -.5 0 0Z" fill="none" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/>
+  <path d="M0 0C1.9 .4 3 1.6 4.4 1.6V-1.6C3 -1.6 1.9 -.4 0 0Z" fill="url(#${id}g)"/><rect x="4.2" y="-1.8" width="2.2" height="3.6" fill="url(#${id}s)"/>
+  <path d="M6.2 -2.2H17.8A2.2 2.2 0 0 1 17.8 2.2H6.2Z" fill="url(#${id}b)"/><path d="M6.2 -2.2h.8v4.4h-.8zM14 -2.2h.8v4.4h-.8z" fill="url(#${id}g)"/></g></svg>`;
+};
 function gearIcon() {
   // Eight-tooth gear outline, generated so it stays crisp at any size.
   const n = 8, R = 8.6, r = 6.7, step = Math.PI / n, pts = [];
@@ -198,7 +214,7 @@ const $ = (id) => document.getElementById(id);
 const chat = $("chat"), input = $("input"), sendBtn = $("send"), allBtn = $("all");
 const post = (msg) => window.webkit.messageHandlers.app.postMessage(msg);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-$("logo-s").innerHTML = NIB(22, "g1");
+$("logo-s").innerHTML = MARK(22, "g1");
 $("new").innerHTML = ICON.new;
 $("close").innerHTML = ICON.close;
 $("gear").innerHTML = ICON.gear;
@@ -209,7 +225,7 @@ const STARTERS = [["按原文拟一版", ""], ["同意，并给出时间", "同�
 const REFINES = ["更简短", "更正式", "语气更委婉", "改成英文"];
 
 function renderEmpty() {
-  chat.innerHTML = `<div class="empty"><div class="logo">${NIB(44, "g2")}</div><h2>为这封邮件执笔</h2>
+  chat.innerHTML = `<div class="empty"><div class="logo">${MARK(44, "g2")}</div><h2>为这封邮件执笔</h2>
     <p>写一句要点，或者点下面的快捷方式。<br>满意后点「打开答复窗口」，正文会填进 Outlook。</p>
     <div class="chips">${STARTERS.map(([t, p], i) => `<button class="chip" data-starter="${i}">${t}</button>`).join("")}</div></div>`;
   refreshDisabled();
@@ -338,12 +354,21 @@ $("sback").addEventListener("click", closeSettings);
 $("gear").addEventListener("click", () => (settingsEl.hidden ? openSettings() : closeSettings()));
 $("save").addEventListener("click", () => { $("smsg").textContent = "保存中…"; post({ type: "saveSettings", values: collectSettings() }); });
 $("ping").addEventListener("click", () => { $("smsg").textContent = "保存并测试中…"; post({ type: "saveSettings", values: collectSettings(), ping: true }); });
+$("login").addEventListener("click", () => {
+  const v = { email: $("email").value.trim(), password: $("pwd").value, server: $("server").value.trim() };
+  if (!v.email || !v.password) { $("acct").textContent = "邮箱和密码都要填。"; return; }
+  $("login").disabled = true; $("acct").textContent = "正在连接邮箱…";
+  post({ type: "login", values: v });
+});
 $("detected").addEventListener("click", (e) => { if (e.target.id === "refresh") { $("smsg").textContent = "正在重新读取 Outlook…"; post({ type: "openSettings", refresh: true }); } });
 
 Object.assign(window.pane, {
   showSettings(d) {
     S = d; const c = d.config, o = d.outlook || {};
     setSeg("auth", c.ai_auth || "claude-login"); setSeg("effort", c.ai_effort || "medium"); setSeg("source", c.format_source || "outlook");
+    const a = d.account || {};
+    $("email").value = a.email || ""; $("server").value = a.server || ""; $("pwd").value = "";
+    $("acct").textContent = a.logged_in ? `已登录 ${a.email}，只读访问邮箱。换账号或改了密码时再登录一次。` : "还没有登录。填好邮箱和密码后点「登录并测试」，密码存进钥匙串。";
     $("baseurl").value = c.ai_base_url || ""; $("apikey").value = "";
     const known = ["", "opus", "sonnet", "haiku"].includes(c.ai_model || "");
     $("model").value = known ? c.ai_model || "" : "custom"; $("modelid").value = known ? "" : c.ai_model;
@@ -363,6 +388,11 @@ Object.assign(window.pane, {
     syncSettings();
   },
   settingsSaved(d) { $("smsg").textContent = d.ok ? "已保存，新草稿会按新设置生成。" : "保存失败：" + (d.message || ""); if (d.ok) { S.api_key_saved = d.api_key_saved; $("apikey").value = ""; $("keyhint").textContent = d.api_key_saved ? "已保存在钥匙串。留空表示不修改。" : "还没有保存 API Key。"; } },
+  loginResult(d) {
+    $("login").disabled = false;
+    if (d.ok) { $("pwd").value = ""; S.account = d.account; }
+    $("acct").textContent = d.ok ? `已登录 ${d.account.email}，可以用了。` : "登录失败：" + (d.message || "");
+  },
   pingResult(d) { $("smsg").textContent = d.ok ? `连接正常：${d.model || "AI"} 回复 ${d.reply}，用时 ${(d.ms / 1000).toFixed(1)} 秒` : "连接失败：" + (d.message || ""); },
 });
 

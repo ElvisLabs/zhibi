@@ -1,11 +1,12 @@
 """AI reply pipeline behind the「AI 答复」button in Outlook (also usable from a shell).
 
-Run with outlook-cli's python (reuses its exchangelib login through mail_info.py):
+Run with 执笔's bundled python, or any python that has outlook-cli installed (its login is reused):
   $PY ai_reply.py generate --subject "<subject shown in Outlook>" --from "<sender line or email>"
                            [--folder 收件箱] [--points "同意，周五前给方案"] [--reply] [--id MAIL_ID]
   $PY ai_reply.py generate --revise <out_dir>/<name> --points "更简短"   # rewrite an earlier draft
   $PY ai_reply.py compose --base <out_dir>/<name>     # open the Outlook reply window with <name>.html
   $PY ai_reply.py settings [--refresh] | save-settings < values.json | ping
+  $PY ai_reply.py login < {"email", "password", "server"}   # check and save the Exchange login, like outlook-cli setup login
 
 generate: find the mail and its attachments' text, ask `claude -p` (no tools) for a Markdown body (plus
           notes for the user when the points ask for analysis), render both to HTML.
@@ -13,7 +14,9 @@ compose:  outlook_compose.sh reply ... for the files generate wrote.
 Progress goes to stderr as "@stage <text>"; stdout is one JSON object.
 """
 import argparse
+import contextlib
 import datetime
+import io
 import json
 import os
 import re
@@ -80,6 +83,17 @@ def keychain_set(key):
 
 def keychain_clear():
     subprocess.run(["security", "delete-generic-password", "-s", KEYCHAIN[0], "-a", KEYCHAIN[1]], capture_output=True)
+
+
+def mailbox_account():
+    """The Exchange login outlook-cli has saved; reads the file only, so the keychain is not touched."""
+    from outlook_cli.config import config_path
+    try:
+        cfg = json.loads(config_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cfg = {}
+    saved = bool(cfg.get("password")) or cfg.get("password_storage") == "keyring"
+    return {"email": cfg.get("email", ""), "server": cfg.get("server", ""), "logged_in": bool(cfg.get("email")) and saved}
 
 
 def find_claude():
@@ -238,6 +252,8 @@ def cmd_generate(args):
         previous = prev.with_name(prev.name + ".md").read_text(encoding="utf-8")
         info["revisions"] = info.get("revisions", []) + [args.points]
     if not args.revise or info["mode"] != mode:
+        if not mailbox_account()["logged_in"]:
+            fail("E_LOGIN", "还没有登录 Exchange 邮箱", 3)
         stage("读取中")
         try:
             account = mail_info.get_account()
@@ -331,6 +347,7 @@ def cmd_settings(args):
         "config": {k: cfg.get(k, "") for k in SETTING_KEYS},
         "outlook": detected,
         "api_key_saved": bool(keychain_get()),
+        "account": mailbox_account(),
     }})
 
 
@@ -348,6 +365,40 @@ def cmd_save_settings(args):
     elif values.get("clear_api_key"):
         keychain_clear()
     emit({"ok": True, "data": {"api_key_saved": bool(keychain_get())}})
+
+
+def cmd_login(args):
+    """Connect with the login from stdin the way `outlook-cli setup login` does, then save it (password to the keychain)."""
+    from outlook_cli import config as oc_config
+    from outlook_cli import exchange
+    values = json.loads(sys.stdin.read() or "{}")
+    email, password, server = (str(values.get(k, "")).strip() for k in ("email", "password", "server"))
+    if not email or not password:
+        fail("E_USAGE", "邮箱和密码都要填", 2)
+    os.environ.update(OUTLOOK_EMAIL=email, OUTLOOK_PASSWORD=password, OUTLOOK_SERVER=server)
+    stage("连接邮箱中")
+    # outlook-cli reports failures by printing and exiting; capture that as our error message.
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            exchange.reset_connection()
+            account = exchange.get_account()
+            account.inbox.total_count
+    except SystemExit:
+        fail("E_LOGIN", out.getvalue().strip()[-400:] or "连接失败", 5)
+    except Exception as exc:
+        fail("E_LOGIN", f"{type(exc).__name__}: {exc}"[:400], 5)
+    path = oc_config.config_path()
+    try:
+        cfg = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        cfg = {}
+    cfg.pop("password_storage", None)
+    cfg.update(email=email, password=password, server=server, timezone=cfg.get("timezone") or "Asia/Shanghai")
+    cfg.setdefault("permissions", {"mode": "read-only"})
+    oc_config.save(cfg)
+    emit({"ok": True, "data": {"account": {"email": account.primary_smtp_address or email, "server": server,
+                                           "logged_in": True}}})
 
 
 def cmd_ping(args):
@@ -381,6 +432,7 @@ def main():
     st.set_defaults(fn=cmd_settings)
     sub.add_parser("save-settings", help="Merge settings JSON from stdin into config.json; api_key goes to Keychain").set_defaults(fn=cmd_save_settings)
     sub.add_parser("ping", help="One tiny request to check the AI settings").set_defaults(fn=cmd_ping)
+    sub.add_parser("login", help="Check and save the Exchange login from stdin JSON").set_defaults(fn=cmd_login)
 
     args = ap.parse_args()
     if args.cmd == "generate" and not (args.subject or args.id or args.revise):

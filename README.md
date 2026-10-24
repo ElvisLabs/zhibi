@@ -15,18 +15,13 @@
 brew install --cask elvislabs/tap/zhibi
 ```
 
-装好后打开「执笔」，按提示在「系统设置 → 隐私与安全性 → 辅助功能」里允许它。之后它会在登录时自动启动，右键按钮可以关掉。
+第一次使用：
 
-### 依赖
+1. 打开「执笔」，按提示在「系统设置 → 隐私与安全性 → 辅助功能」里允许它。之后它会在登录时自动启动，右键按钮可以关掉。
+2. 在 Outlook 里点工具栏右侧的执笔按钮，再点面板右上角的齿轮，在「邮箱账号」里填邮箱和密码，点「登录并测试」。服务器一般留空，自动发现不了时再填，例如 `mail.company.com`。
+3. 装好 [Claude Code](https://claude.com/claude-code) 并在终端运行一次 `claude` 登录。也可以在设置里改用 Anthropic API Key，但仍然要装 Claude Code。
 
-| 依赖 | 用来做什么 | 怎么装 |
-|---|---|---|
-| 新版 Outlook for Mac（中文界面） | 按钮和面板挂在它的窗口上 | |
-| [outlook-cli](https://github.com/fatecannotbealtered/outlook-cli)（Python 版） | 通过 EWS 只读邮件和附件 | `pipx install git+https://github.com/fatecannotbealtered/outlook-cli.git`，再按它的说明登录 Exchange 邮箱 |
-| [Claude Code](https://claude.com/claude-code) | 写回复（`claude -p`，不带任何工具） | 装好后在终端运行一次 `claude` 登录；也可以在面板「设置」里改用 Anthropic API Key |
-
-- npm 版 outlook-cli 是打包好的二进制，执笔调用不了，需要 pip、pipx 或 uv 装的 Python 版。
-- 读 Excel、PDF 附件还要装几个库：`pipx inject outlook-cli openpyxl xlrd pypdf`。Word、PPT 和文本不需要。
+读邮件用的 [outlook-cli](https://github.com/fatecannotbealtered/outlook-cli)（含 exchangelib）和读 Excel、PDF 附件的库都打包在 app 里，自带一份 Python，不用另外安装，所以 app 有 100 MB 左右。只需要新版 Outlook for Mac（中文界面）和 Claude Code。
 
 ## 使用
 
@@ -42,7 +37,9 @@ brew install --cask elvislabs/tap/zhibi
 ## 数据和隐私
 
 - 选中邮件的正文、收件人和附件文字会发给 Claude，走你本机 Claude Code 的登录，或者你在设置里填的 API。
-- 设置在 `~/Library/Application Support/Zhibi/config.json`，草稿在同目录的 `drafts/`，日志在 `~/Library/Logs/Zhibi/`。API Key 存在钥匙串里。
+- 设置在 `~/Library/Application Support/Zhibi/config.json`，草稿在同目录的 `drafts/`，日志在 `~/Library/Logs/Zhibi/`。
+- 邮箱账号按 outlook-cli 的方式保存：账号和服务器在 `~/.outlook-cli/config.json`，密码在钥匙串里。用过 outlook-cli 的话会直接沿用它的登录，第一次读邮件时钥匙串会问是否允许执笔里的 python3 读取「outlook-cli」的密码，点「始终允许」。
+- Anthropic API Key 也存在钥匙串里。
 - 卸载：`brew uninstall --cask zhibi`。连设置和草稿一起删：`brew uninstall --zap --cask zhibi`。
 
 ## 已知限制
@@ -59,9 +56,11 @@ brew install --cask elvislabs/tap/zhibi
 
 ```bash
 app/build.sh             # 编译，装到 ~/Applications/执笔.app 并重启
-app/build.sh --release   # universal、ad-hoc 签名，打包到 dist/
-app/publish.sh           # 按 app/Info.plist 的版本号打 tag、发 GitHub Release、更新 Homebrew cask
+app/build.sh --release   # arm64 和 x86_64 各打一个 ad-hoc 签名的 zip 到 dist/
+app/publish.sh           # 按 app/Info.plist 的版本号打 tag，发 GitHub Release 草稿，在 Apple 芯片上冒烟测试通过后发布，再更新 Homebrew cask
 ```
+
+- `app/build_python.sh`：打包进 app 的 Python（[python-build-standalone](https://github.com/astral-sh/python-build-standalone) + outlook-cli + 附件读取库），按目标架构下载 wheel，所以 Intel Mac 也能打 arm64 的包。
 
 - `app/Zhibi.swift`：按钮、面板、跟随 Outlook 窗口和桌面切换。
 - `app/pane.html`：面板页面（WKWebView）。
@@ -70,4 +69,4 @@ app/publish.sh           # 按 app/Info.plist 的版本号打 tag、发 GitHub R
 
 ## License
 
-MIT
+MIT。app 里打包的 Python 和各个库保留各自的许可证，见 `Contents/Resources/python` 里的 `LICENSE.txt` 和各包的 `*.dist-info`。

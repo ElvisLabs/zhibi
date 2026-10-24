@@ -53,17 +53,8 @@ func log(_ msg: String) {
     }
 }
 
-/// outlook-cli's own interpreter (has exchangelib and the keyring login). The npm build of outlook-cli is a
-/// frozen binary without an importable package, so only pip / pipx / uv installs count.
-func pythonPath() -> String? {
-    for cli in [NSHomeDirectory() + "/.local/bin/outlook-cli", "/opt/homebrew/bin/outlook-cli", "/usr/local/bin/outlook-cli"] {
-        guard let text = try? String(contentsOfFile: cli, encoding: .utf8), text.hasPrefix("#!") else { continue }
-        let line = text.split(separator: "\n", maxSplits: 1).first.map(String.init) ?? ""
-        let py = String(line.dropFirst(2)).trimmingCharacters(in: .whitespaces)
-        if (py as NSString).lastPathComponent.hasPrefix("python") { return py }
-    }
-    return nil
-}
+/// The Python bundled in Resources/python (python-build-standalone with outlook-cli and exchangelib).
+let python = Bundle.main.resourcePath! + "/python/bin/python3"
 
 // MARK: - AX helpers
 
@@ -308,37 +299,97 @@ func floatingPanel(nonActivating: Bool) -> KeyPanel {
 }
 
 /// 执笔's mark: a fountain-pen nib, tip down-left, drawn into `rect` (also used for the app icon).
-func drawNib(in rect: NSRect) {
-    let k = rect.width / 32
-    let t = NSAffineTransform()
-    // The nib is defined in a 32-unit y-down box like the SVG in pane.html.
-    t.translateX(by: rect.midX, yBy: rect.midY)
-    t.scaleX(by: k, yBy: -k)
-    t.rotate(byDegrees: 45)
-    t.translateX(by: -16, yBy: -16)
-    let body = NSBezierPath()
-    body.move(to: NSPoint(x: 10.5, y: 3))
-    body.line(to: NSPoint(x: 21.5, y: 3))
-    body.curve(to: NSPoint(x: 25, y: 14), controlPoint1: NSPoint(x: 21.5, y: 7.5), controlPoint2: NSPoint(x: 25, y: 9.5))
-    body.line(to: NSPoint(x: 16, y: 30))
-    body.line(to: NSPoint(x: 7, y: 14))
-    body.curve(to: NSPoint(x: 10.5, y: 3), controlPoint1: NSPoint(x: 7, y: 9.5), controlPoint2: NSPoint(x: 10.5, y: 7.5))
-    body.close()
-    let hole = NSBezierPath(ovalIn: NSRect(x: 14, y: 13, width: 4, height: 4))
-    let slit = NSBezierPath()
-    slit.move(to: NSPoint(x: 16, y: 16))
-    slit.line(to: NSPoint(x: 16, y: 30))
-    for path in [body, hole, slit] { path.transform(using: t as AffineTransform) }
-    NSGradient(colors: [NSColor(srgbRed: 0.06, green: 0.42, blue: 0.74, alpha: 1),
-                        NSColor(srgbRed: 0.07, green: 0.64, blue: 0.71, alpha: 1)])?.draw(in: body, angle: -45)
-    NSColor.white.set()
-    hole.fill()
-    slit.lineWidth = 1.6 * k
-    slit.lineCapStyle = .round
-    slit.stroke()
+// 执笔's mark: a blue envelope and a fountain pen writing on it, in a 32-unit y-down box (same numbers as
+// the SVG in pane.html).
+struct Mark {
+    let env: NSBezierPath, flap: NSBezierPath, ink: NSBezierPath
+    let outline: NSBezierPath, nib: NSBezierPath, section: NSBezierPath, barrel: NSBezierPath, bands: NSBezierPath
+    let k: CGFloat, axis: AffineTransform
+    init(in rect: NSRect) {
+        k = rect.width / 32
+        let box = AffineTransform(m11: k, m12: 0, m21: 0, m22: -k, tX: rect.minX, tY: rect.maxY)
+        env = NSBezierPath(roundedRect: NSRect(x: 2, y: 9, width: 21, height: 15), xRadius: 2.6, yRadius: 2.6)
+        flap = NSBezierPath()
+        flap.move(to: NSPoint(x: 4.4, y: 11.3))
+        flap.line(to: NSPoint(x: 12.5, y: 17))
+        flap.line(to: NSPoint(x: 20.6, y: 11.3))
+        ink = NSBezierPath()
+        ink.move(to: NSPoint(x: 5.6, y: 20.6))
+        ink.curve(to: NSPoint(x: 9.6, y: 20.4), controlPoint1: NSPoint(x: 6.8, y: 18.6), controlPoint2: NSPoint(x: 8.4, y: 18.6))
+        ink.curve(to: NSPoint(x: 13.6, y: 20.4), controlPoint1: NSPoint(x: 10.8, y: 22.2), controlPoint2: NSPoint(x: 12.4, y: 22.2))
+        // Pen parts along its own axis: x from the nib tip, y across.
+        outline = NSBezierPath()
+        outline.move(to: .zero)
+        outline.curve(to: NSPoint(x: 4.2, y: 1.8), controlPoint1: NSPoint(x: 1.9, y: 0.5), controlPoint2: NSPoint(x: 3, y: 1.8))
+        outline.line(to: NSPoint(x: 6.2, y: 2.2))
+        outline.line(to: NSPoint(x: 17.8, y: 2.2))
+        outline.appendArc(withCenter: NSPoint(x: 17.8, y: 0), radius: 2.2, startAngle: 90, endAngle: -90, clockwise: true)
+        outline.line(to: NSPoint(x: 6.2, y: -2.2))
+        outline.line(to: NSPoint(x: 4.2, y: -1.8))
+        outline.curve(to: .zero, controlPoint1: NSPoint(x: 3, y: -1.8), controlPoint2: NSPoint(x: 1.9, y: -0.5))
+        outline.close()
+        nib = NSBezierPath()
+        nib.move(to: .zero)
+        nib.curve(to: NSPoint(x: 4.4, y: 1.6), controlPoint1: NSPoint(x: 1.9, y: 0.4), controlPoint2: NSPoint(x: 3, y: 1.6))
+        nib.line(to: NSPoint(x: 4.4, y: -1.6))
+        nib.curve(to: .zero, controlPoint1: NSPoint(x: 3, y: -1.6), controlPoint2: NSPoint(x: 1.9, y: -0.4))
+        nib.close()
+        section = NSBezierPath(rect: NSRect(x: 4.2, y: -1.8, width: 2.2, height: 3.6))
+        barrel = NSBezierPath()
+        barrel.move(to: NSPoint(x: 6.2, y: -2.2))
+        barrel.line(to: NSPoint(x: 17.8, y: -2.2))
+        barrel.appendArc(withCenter: NSPoint(x: 17.8, y: 0), radius: 2.2, startAngle: -90, endAngle: 90)
+        barrel.line(to: NSPoint(x: 6.2, y: 2.2))
+        barrel.close()
+        bands = NSBezierPath(rect: NSRect(x: 6.2, y: -2.2, width: 0.8, height: 4.4))
+        bands.append(NSBezierPath(rect: NSRect(x: 14, y: -2.2, width: 0.8, height: 4.4)))
+        // Tip at the end of the ink line, pen rising to the upper right.
+        var a = AffineTransform(rotationByDegrees: -45)
+        a.append(AffineTransform(translationByX: 14, byY: 20.4))
+        a.append(box)
+        axis = a
+        for p in [outline, nib, section, barrel, bands] { p.transform(using: a) }
+        for p in [env, flap, ink] { p.transform(using: box) }
+    }
 }
 
-/// White disc with the nib, sized like Outlook's Copilot button; a spinning arc while busy.
+func rgb(_ hex: UInt32) -> NSColor {
+    NSColor(srgbRed: CGFloat((hex >> 16) & 255) / 255, green: CGFloat((hex >> 8) & 255) / 255, blue: CGFloat(hex & 255) / 255, alpha: 1)
+}
+/// Fills `path` with a gradient across the pen (perpendicular to its axis).
+func across(_ path: NSBezierPath, _ m: Mark, _ colors: [NSColor], _ locations: [CGFloat], halfWidth h: CGFloat) {
+    NSGraphicsContext.saveGraphicsState()
+    path.addClip()
+    let from = m.axis.transform(NSPoint(x: 0, y: -h)), to = m.axis.transform(NSPoint(x: 0, y: h))
+    var locs = locations
+    NSGradient(colors: colors, atLocations: &locs, colorSpace: .sRGB)!.draw(from: from, to: to, options: [.drawsBeforeStartingLocation, .drawsAfterEndingLocation])
+    NSGraphicsContext.restoreGraphicsState()
+}
+
+/// The mark for light backgrounds (the toolbar button).
+func drawMark(in rect: NSRect) {
+    let m = Mark(in: rect)
+    NSGradient(starting: rgb(0x5CC2FF), ending: rgb(0x1660E8))!.draw(in: m.env, angle: -90)
+    for p in [m.flap, m.ink] {
+        p.lineWidth = 1.1 * m.k
+        p.lineCapStyle = .round
+        p.lineJoinStyle = .round
+    }
+    NSColor(white: 1, alpha: 0.8).setStroke()
+    m.flap.stroke()
+    NSColor.white.setStroke()
+    m.ink.stroke()
+    // White edge so the pen stands off the envelope.
+    m.outline.lineWidth = 1.6 * m.k
+    m.outline.lineJoinStyle = .round
+    m.outline.stroke()
+    across(m.nib, m, [rgb(0x9C6B1E), rgb(0xF3D27E), rgb(0x9C6B1E)], [0, 0.6, 1], halfWidth: 1.6)
+    across(m.section, m, [rgb(0x05070C), rgb(0x4A5262), rgb(0x0B0E15)], [0, 0.7, 1], halfWidth: 1.8)
+    across(m.barrel, m, [rgb(0x0B1630), rgb(0x2A4F9E), rgb(0x8FB0EE), rgb(0x112552)], [0, 0.55, 0.78, 1], halfWidth: 2.2)
+    across(m.bands, m, [rgb(0x9C6B1E), rgb(0xF3D27E), rgb(0x9C6B1E)], [0, 0.65, 1], halfWidth: 2.2)
+}
+
+/// White disc with the mark, sized like Outlook's Copilot button; a spinning arc while busy.
 final class RoundButton: NSView {
     static let margin: CGFloat = 4  // room for the drop shadow
 
@@ -395,8 +446,8 @@ final class RoundButton: NSView {
         fill.setFill()
         NSBezierPath(ovalIn: disc).fill()
         NSGraphicsContext.restoreGraphicsState()
-        let side = (disc.width * 0.62).rounded()
-        drawNib(in: NSRect(x: disc.midX - side / 2, y: disc.midY - side / 2, width: side, height: side))
+        let side = (disc.width * 0.78).rounded()
+        drawMark(in: NSRect(x: disc.midX - side / 2, y: disc.midY - side / 2, width: side, height: side))
     }
 
     override func updateTrackingAreas() {
@@ -672,6 +723,14 @@ final class App: NSObject, NSApplicationDelegate {
                 if ok, let d = res["data"] { self?.pane.call("showSettings", d) }
                 else { self?.pane.call("settingsSaved", ["ok": false, "message": (res["error"] as? [String: Any])?["message"] ?? "读取设置失败"]) }
             }
+        case "login":
+            let input = (try? JSONSerialization.data(withJSONObject: m["values"] as? [String: Any] ?? [:])) ?? Data()
+            run(["login"], stdin: input, track: false) { [weak self] ok, res in
+                var d = res["data"] as? [String: Any] ?? [:]
+                d["ok"] = ok
+                if !ok { d["message"] = (res["error"] as? [String: Any])?["message"] ?? "未知错误" }
+                self?.pane.call("loginResult", d)
+            }
         case "saveSettings":
             let values = m["values"] as? [String: Any] ?? [:]
             let input = (try? JSONSerialization.data(withJSONObject: values)) ?? Data()
@@ -730,6 +789,7 @@ final class App: NSObject, NSApplicationDelegate {
                     switch code {
                     case "E_CANCELLED": return "已停止。"
                     case "E_NOT_FOUND": return "在邮箱里没找到这封邮件（按主题和发件人查找）。"
+                    case "E_LOGIN": return "还没有登录 Exchange 邮箱：点面板右上角的齿轮，在「邮箱账号」里登录。"
                     case "E_AI": return "AI 生成失败：\(err["message"] as? String ?? "")"
                     default: return "生成失败：\(err["message"] as? String ?? "未知错误")"
                     }
@@ -806,11 +866,8 @@ final class App: NSObject, NSApplicationDelegate {
     /// Runs ai_reply.py; "@stage" lines on stderr report progress, stdout is one JSON object.
     func run(_ args: [String], stdin: Data? = nil, track: Bool = true, onStage: @escaping (String) -> Void = { _ in },
              done: @escaping (Bool, [String: Any]) -> Void) {
-        guard let py = pythonPath() else {
-            return done(false, ["error": ["code": "E_CONFIG", "message": "找不到 Python 版 outlook-cli，安装方法见 https://github.com/ElvisLabs/zhibi"]])
-        }
         let p = Process()
-        p.executableURL = URL(fileURLWithPath: py)
+        p.executableURL = URL(fileURLWithPath: python)
         p.arguments = [pipeline] + args
         var env = ProcessInfo.processInfo.environment
         env["PATH"] = NSHomeDirectory() + "/.local/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"

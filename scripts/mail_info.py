@@ -23,7 +23,7 @@ try:
     from outlook_cli.config import load as load_oc_config
     from outlook_cli.exchange import find_mail_by_id, get_account
 except ImportError as exc:
-    print(json.dumps({"ok": False, "error": {"code": "E_CONFIG", "message": f"run with outlook-cli's python: {exc}"}}))
+    print(json.dumps({"ok": False, "error": {"code": "E_CONFIG", "message": f"run with a python that has outlook-cli: {exc}"}}))
     sys.exit(4)
 
 REPLY_PREFIX_RE = re.compile(r"^\s*(re|回复|答复)\s*[:：]", re.I)

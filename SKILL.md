@@ -23,7 +23,7 @@ description: >-
 | `scripts/outlook_compose.sh` | 在 app 包里直接用预编译的 helper，否则首次运行自动编译 `outlook_compose.swift`；选中邮件 → 点「答复 / 全部答复」→ 把 HTML 粘到正文顶部，粘完恢复剪贴板 |
 | `scripts/ai_reply.py` | 面板背后的流水线：`generate`（查邮件 → `claude -p` 写正文 → 渲染）、`compose`（开回复窗口）、`settings / save-settings / ping` |
 | `scripts/outlook_style.py` | 读 Outlook 的回复格式：字体、字号、颜色（取自最近一封已发邮件）和签名（Outlook 配置文件里的签名），缓存到 `~/Library/Caches/Zhibi/outlook_style.json`，一天刷新一次 |
-| `app/` | 「执笔」的源码（`Zhibi.swift`、`pane.html`、图标 `make_icon.swift`）、`build.sh` 和发版用的 `publish.sh`，见第 6 节 |
+| `app/` | 「执笔」的源码（`Zhibi.swift`、`pane.html`、图标 `make_icon.swift`）、`build.sh`、打包 Python 的 `build_python.sh` 和发版用的 `publish.sh`，见第 6 节 |
 | `references/style.md` | 写作规范 + 可用格式，skill 和「执笔」共用 |
 | `references/templates.md` | 7 类回复骨架（确认 / 逐条答复 / 状态 / Bug / 请求决策 / 婉拒 / 会议结论） |
 | `~/Library/Application Support/Zhibi/config.json` | 设置（skill 和「执笔」共用）：格式来源（`format_source`: `outlook` / `custom`）、自定义字体字号颜色、签名（`signature`: `outlook` / 签名名 / `none`）、结束语、主色；AI（`ai_auth`、`ai_base_url`、`ai_model`、`ai_effort`）；`out_dir`、`log_file`。面板「设置」里改的就是这些 |
@@ -32,7 +32,9 @@ description: >-
 
 ```bash
 S=~/.claude/skills/outlook-mail-writer/scripts
-PY=$(head -1 "$(command -v outlook-cli)" | sed 's/^#!//')   # outlook-cli 自带的 python（含 exchangelib）
+PY=~/Applications/执笔.app/Contents/Resources/python/bin/python3              # 执笔自带的 python（含 outlook-cli、exchangelib）
+[ -x "$PY" ] || PY=/Applications/执笔.app/Contents/Resources/python/bin/python3  # Homebrew 装的执笔
+[ -x "$PY" ] || PY=$(head -1 "$(command -v outlook-cli)" | sed 's/^#!//')         # 没装执笔：outlook-cli 自己的 python
 OUT=_ai/reports/mail && mkdir -p "$OUT"                      # 在 git 仓库里时确认 _ai/ 已写进 .git/info/exclude
 ```
 
@@ -107,11 +109,11 @@ HTML 只用内联样式和表格布局，Windows Outlook（Word 渲染引擎）�
 - URL：`open "outlookai://reply"` 打开面板；`open -g "outlookai://reply?points=同意&to=sender"` 直接发一条要点。
 - 面板是 `app/pane.html`（WKWebView，带 CSP，草稿里的链接在浏览器打开），和 Swift 通过 `app` 消息通信：`send / refine / regen / open / copy / new / close`。
 - 产物：`out_dir`（默认 `~/Library/Application Support/Zhibi/drafts`）下每次一组 `.info.json / .md / .html / .preview.html`；日志在 `log_file`（默认 `~/Library/Logs/Zhibi/zhibi.log`）。
-- 设置（面板右上角齿轮）：AI 认证（本机 Claude Code 登录 / Anthropic API Key，Key 存在钥匙串 `outlook-ai`）、API 地址（`ANTHROPIC_BASE_URL`，走网关时用）、模型、思考力度；回复格式（跟随 Outlook / 自定义字体字号颜色）；签名和结束语；带实时预览，「测试连接」会先保存再发一个最小请求。
+- 设置（面板右上角齿轮）：邮箱账号（`ai_reply.py login`，和 `outlook-cli setup login` 一样先连一次再保存，账号写 `~/.outlook-cli/config.json`、密码进钥匙串）；AI 认证（本机 Claude Code 登录 / Anthropic API Key，Key 存在钥匙串 `outlook-ai`）、API 地址（`ANTHROPIC_BASE_URL`，走网关时用）、模型、思考力度；回复格式（跟随 Outlook / 自定义字体字号颜色）；签名和结束语；带实时预览，「测试连接」会先保存再发一个最小请求。
 - AI：`claude -p --tools ""`，`ai_model`（空 = CLI 默认）、`ai_effort`（默认 `medium`）；提示词 = `style.md` + `templates.md` + 原邮件 + 要点 (+ 上一版和修改意见) + 21 天日历；答案要求放在 `<reply>` 标签里，标签外的内容丢弃。
-- 面板跑的是 app 包里 `Contents/Resources/scripts` 的副本，改了 `scripts/` 或 `references/` 也要重新 build。
-- 改代码后：`app/build.sh`（编译 `Zhibi.swift` 和 `outlook_compose`，拷 `pane.html`、`scripts/`、`references/`，有 Apple Development 证书就用它签名，装到 `~/Applications/执笔.app` 并重启；已有 `~/Applications/OutlookAI.app` 的老安装沿用原路径，辅助功能授权是按路径记的）。
-- 发版：改 `app/Info.plist` 的版本号并提交，再跑 `app/publish.sh`：打 universal、ad-hoc 签名的 zip，打 tag、发 GitHub Release，更新 `ElvisLabs/homebrew-tap` 的 `Casks/zhibi.rb`。用户 `brew install --cask elvislabs/tap/zhibi` 安装到 `/Applications/执笔.app`。
+- 面板跑的是 app 包里 `Contents/Resources/scripts` 的副本，用 app 自带的 Python（`Contents/Resources/python`，outlook-cli 版本钉在 `build_python.sh`），改了 `scripts/` 或 `references/` 也要重新 build。
+- 改代码后：`app/build.sh`（编译 `Zhibi.swift` 和 `outlook_compose`，拷 `pane.html`、`scripts/`、`references/`，有 Apple Development 证书就用它签名，装到 `~/Applications/执笔.app` 并重启。辅助功能授权按 app 路径记，换了路径要重新允许）。
+- 发版：改 `app/Info.plist` 的版本号并提交，再跑 `app/publish.sh`：arm64、x86_64 各打一个 ad-hoc 签名的 zip，打 tag、发 Release 草稿，`.github/workflows/smoke.yml` 在 Apple 芯片 runner 上跑通 arm64 包后才发布，再更新 `ElvisLabs/homebrew-tap` 的 `Casks/zhibi.rb`。用户 `brew install --cask elvislabs/tap/zhibi` 安装到 `/Applications/执笔.app`。
 - 权限：执笔.app 需要「辅助功能」权限。点「打开答复窗口」前会先把 Outlook 切回前台，所以平时不需要「自动化」权限。
 - 命令行排查：`$PY $S/ai_reply.py generate --subject "<Outlook 里显示的主题>" --from <发件人邮箱> --folder 收件箱 --points "…"`，`$PY $S/ai_reply.py generate --revise <base> --points "更简短"`，`$PY $S/ai_reply.py compose --base <base>`。
 - 如果邮箱允许部署 Office 加载项，`pane.html` 可以直接当任务窗格页面，用 Office.js `displayReplyAllFormAsync({htmlBody})` 打开回复窗口，就不需要 Accessibility 了。
